@@ -15,6 +15,7 @@ import model
 # Train on CPU (hide GPU) due to memory constraints
 os.environ['CUDA_VISIBLE_DEVICES'] = ""
 
+print(os.getcwd())
 adj, features = load_data(args.dataset)
 
 # Store original adjacency matrix (without diagonal entries) for later
@@ -45,13 +46,13 @@ adj_label = sparse_to_tuple(adj_label)
 
 
 
-adj_norm = torch.sparse.FloatTensor(torch.LongTensor(adj_norm[0].T), 
+adj_norm = torch.sparse.FloatTensor(torch.LongTensor(adj_norm[0].T / 1.0), 
                             torch.FloatTensor(adj_norm[1]), 
                             torch.Size(adj_norm[2]))
-adj_label = torch.sparse.FloatTensor(torch.LongTensor(adj_label[0].T), 
+adj_label = torch.sparse.FloatTensor(torch.LongTensor(adj_label[0].T / 1.0), 
                             torch.FloatTensor(adj_label[1]), 
                             torch.Size(adj_label[2]))
-features = torch.sparse.FloatTensor(torch.LongTensor(features[0].T), 
+features = torch.sparse.FloatTensor(torch.LongTensor(features[0].T / 1.0), 
                             torch.FloatTensor(features[1]), 
                             torch.Size(features[2]))
 
