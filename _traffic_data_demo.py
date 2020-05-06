@@ -296,7 +296,9 @@ def train():
 
     num_nodes = adj.shape[0]
 
+    features = features.tolil()
     features = sparse_to_tuple(features.tocoo())
+
     num_features = features[2][1]
     features_nonzero = features[1].shape[0]
     print_msg("initial data ok.")
