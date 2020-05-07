@@ -1,3 +1,4 @@
+import platform
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -269,7 +270,11 @@ def print_msg(msg):
 
 def train():
     model = 'GAE'
-    filename = r"C:\Users\pengl\Downloads\road_network_sub-dataset\road_network_sub-dataset"
+    filename = ''
+    if platform.system() == 'Windows':
+        filename = r"C:\Users\pengl\Downloads\road_network_sub-dataset\road_network_sub-dataset"
+    else:
+        filename = "/home/lip/文档/data/road_network_sub-dataset/road_network_sub-dataset"
     
     print_msg("begin loading data ...")
     adj, features = load_data(filename)
