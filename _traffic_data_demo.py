@@ -34,7 +34,7 @@ class VGAE(nn.Module):
     def forward(self, X):
         Z = self.encode(X)
         A_pred = dot_product_decode(Z)
-        return A_pred
+        return Z, A_pred
 
 
 class GraphConvSparse(nn.Module):
@@ -237,7 +237,7 @@ def load_data(filename):
             data_speedclass.append(line_arr[6])
             data_lanenum.append(line_arr[7])
             # 减少数据量，防止内存不足
-            if lines_num > 2000:
+            if lines_num > 7000:
                 break
     data_link_id = np.array(data_link_id, dtype=np.int64)
     # data_width = np.array(data_width, dtype = np.int)
@@ -299,10 +299,11 @@ def train():
 
     print_msg("begin initial data ...")
     args.input_dim = features.shape[1]
-    args.hidden1_dim = 7
+    args.hidden1_dim = 10
     args.hidden2_dim = 2
     args.learning_rate = 0.01
-    args.num_epoch = 20
+    args.num_epoch = 100
+    args.model = 'VGAE'
 
     # Store original adjacency matrix (without diagonal entries) for later
     adj_orig = adj
@@ -344,7 +345,7 @@ def train():
     weight_tensor[weight_mask] = pos_weight
 
     # init model and optimizer
-    model = GAE(adj_norm)
+    model = VGAE(adj_norm)
     optimizer = torch.optim.Adam(model.parameters(), lr=args.learning_rate)
     print_msg("create model ok.")
 
@@ -409,7 +410,16 @@ def train():
     test_roc, test_ap = get_scores(test_edges, test_edges_false, A_pred)
     print("End of training!", "test_roc=", "{:.5f}".format(test_roc), "test_ap=", "{:.5f}".format(test_ap))
 
-    print(hidden_z.sha
+    print(hidden_z.shape)
+    hidden_z = hidden_z.detach().numpy()
+    tsne = TSNE(n_components = 2, learning_rate = 100).fit_transform(hidden_z)
+    labels = KMeans(n_clusters = 10).fit_predict(tsne)
+
+    plt.figure()
+    plt.scatter(tsne[:, 0], tsne[:, 1], s = 0.5, c = labels)
+    plt.colorbar()
+    plt.show()
+    plt.close()
 
 if __name__ == "__main__":
     train()
