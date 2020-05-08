@@ -7,69 +7,78 @@ import time
 import numpy as np
 import networkx as nx
 import scipy.sparse as sp
+import args
+import matplotlib.pyplot as plt
+from sklearn.metrics import roc_auc_score, average_precision_score
+from sklearn.preprocessing import OneHotEncoder
+from sklearn.preprocessing import LabelEncoder
+from sklearn.manifold import TSNE
+from sklearn.cluster import KMeans
 
 
 class VGAE(nn.Module):
-	def __init__(self, adj):
-		super(VGAE,self).__init__()
-		self.base_gcn = GraphConvSparse(args.input_dim, args.hidden1_dim, adj)
-		self.gcn_mean = GraphConvSparse(args.hidden1_dim, args.hidden2_dim, adj, activation=lambda x:x)
-		self.gcn_logstddev = GraphConvSparse(args.hidden1_dim, args.hidden2_dim, adj, activation=lambda x:x)
+    def __init__(self, adj):
+        super(VGAE, self).__init__()
+        self.base_gcn = GraphConvSparse(args.input_dim, args.hidden1_dim, adj)
+        self.gcn_mean = GraphConvSparse(args.hidden1_dim, args.hidden2_dim, adj, activation=lambda x: x)
+        self.gcn_logstddev = GraphConvSparse(args.hidden1_dim, args.hidden2_dim, adj, activation=lambda x: x)
 
-	def encode(self, X):
-		hidden = self.base_gcn(X)
-		self.mean = self.gcn_mean(hidden)
-		self.logstd = self.gcn_logstddev(hidden)
-		gaussian_noise = torch.randn(X.size(0), args.hidden2_dim)
-		sampled_z = gaussian_noise*torch.exp(self.logstd) + self.mean
-		return sampled_z
+    def encode(self, X):
+        hidden = self.base_gcn(X)
+        self.mean = self.gcn_mean(hidden)
+        self.logstd = self.gcn_logstddev(hidden)
+        gaussian_noise = torch.randn(X.size(0), args.hidden2_dim)
+        sampled_z = gaussian_noise * torch.exp(self.logstd) + self.mean
+        return sampled_z
 
-	def forward(self, X):
-		Z = self.encode(X)
-		A_pred = dot_product_decode(Z)
-		return A_pred
+    def forward(self, X):
+        Z = self.encode(X)
+        A_pred = dot_product_decode(Z)
+        return A_pred
+
 
 class GraphConvSparse(nn.Module):
-	def __init__(self, input_dim, output_dim, adj, activation = F.relu, **kwargs):
-		super(GraphConvSparse, self).__init__(**kwargs)
-		self.weight = glorot_init(input_dim, output_dim) 
-		self.adj = adj
-		self.activation = activation
+    def __init__(self, input_dim, output_dim, adj, activation=F.relu, **kwargs):
+        super(GraphConvSparse, self).__init__(**kwargs)
+        self.weight = glorot_init(input_dim, output_dim)
+        self.adj = adj
+        self.activation = activation
 
-	def forward(self, inputs):
-		x = inputs
-		x = torch.mm(x,self.weight)
-		x = torch.mm(self.adj, x)
-		outputs = self.activation(x)
-		return outputs
+    def forward(self, inputs):
+        x = inputs
+        x = torch.mm(x, self.weight)
+        x = torch.mm(self.adj, x)
+        outputs = self.activation(x)
+        return outputs
 
 
 def dot_product_decode(Z):
-	A_pred = torch.sigmoid(torch.matmul(Z,Z.t()))
-	return A_pred
+    A_pred = torch.sigmoid(torch.matmul(Z, Z.t()))
+    return A_pred
+
 
 def glorot_init(input_dim, output_dim):
-	init_range = np.sqrt(6.0/(input_dim + output_dim))
-	initial = torch.rand(input_dim, output_dim)*2*init_range - init_range
-	return nn.Parameter(initial)
+    init_range = np.sqrt(6.0 / (input_dim + output_dim))
+    initial = torch.rand(input_dim, output_dim) * 2 * init_range - init_range
+    return nn.Parameter(initial)
 
 
 class GAE(nn.Module):
-	def __init__(self,adj):
-		super(GAE,self).__init__()
-		self.base_gcn = GraphConvSparse(args.input_dim, args.hidden1_dim, adj)
-		self.gcn_mean = GraphConvSparse(args.hidden1_dim, args.hidden2_dim, adj, activation=lambda x:x)
+    def __init__(self, adj):
+        super(GAE, self).__init__()
+        self.base_gcn = GraphConvSparse(args.input_dim, args.hidden1_dim, adj)
+        self.gcn_mean = GraphConvSparse(args.hidden1_dim, args.hidden2_dim, adj, activation=lambda x: x)
 
-	def encode(self, X):
-		hidden = self.base_gcn(X)
-		z = self.mean = self.gcn_mean(hidden)
-		return z
+    def encode(self, X):
+        hidden = self.base_gcn(X)
+        z = self.mean = self.gcn_mean(hidden)
+        return z
 
-	def forward(self, X):
-		Z = self.encode(X)
-		A_pred = dot_product_decode(Z)
-		return A_pred
-		
+    def forward(self, X):
+        Z = self.encode(X)
+        A_pred = dot_product_decode(Z)
+        return Z, A_pred
+
 
 # class GraphConv(nn.Module):
 # 	def __init__(self, input_dim, hidden_dim, output_dim):
@@ -84,6 +93,7 @@ class GAE(nn.Module):
 # 		out = A*X*self.w0
 #
 
+
 def sparse_to_tuple(sparse_mx):
     if not sp.isspmatrix_coo(sparse_mx):
         sparse_mx = sparse_mx.tocoo()
@@ -92,6 +102,7 @@ def sparse_to_tuple(sparse_mx):
     shape = sparse_mx.shape
     return coords, values, shape
 
+
 def preprocess_graph(adj):
     adj = sp.coo_matrix(adj)
     adj_ = adj + sp.eye(adj.shape[0])
@@ -99,6 +110,7 @@ def preprocess_graph(adj):
     degree_mat_inv_sqrt = sp.diags(np.power(rowsum, -0.5).flatten())
     adj_normalized = adj_.dot(degree_mat_inv_sqrt).transpose().dot(degree_mat_inv_sqrt).tocoo()
     return sparse_to_tuple(adj_normalized)
+
 
 def mask_test_edges(adj):
     # Function to build test set with 10% positive links
@@ -182,9 +194,6 @@ def mask_test_edges(adj):
     return adj_train, train_edges, val_edges, val_edges_false, test_edges, test_edges_false
 
 
-from sklearn.preprocessing import OneHotEncoder 
-from sklearn.preprocessing import LabelEncoder
-
 def one_hot_encode(arr_values):
     label_encoder = LabelEncoder()
     integer_encoded = label_encoder.fit_transform(arr_values)
@@ -194,11 +203,13 @@ def one_hot_encode(arr_values):
     onehot_encoded = onehot_encoder.fit_transform(integer_encoded)
     return onehot_encoded
 
+
 def feature_merge(fea_list):
     feature = np.empty(shape=(fea_list[0].shape[0], 0))
     for fea in fea_list:
-        feature = np.append(feature, fea, axis = 1)
+        feature = np.append(feature, fea, axis=1)
     return feature
+
 
 def load_data(filename):
     data_link_id = []
@@ -215,7 +226,7 @@ def load_data(filename):
             lines_num += 1
             if lines_num == 1:
                 continue
-            line=line.strip('\n')   #将\n去掉
+            line = line.strip('\n')  # 将\n去掉
             line_arr = line.split('\t')
             data_link_id.append(line_arr[0])
             data_width.append(line_arr[1])
@@ -225,15 +236,18 @@ def load_data(filename):
             data_length.append(line_arr[5])
             data_speedclass.append(line_arr[6])
             data_lanenum.append(line_arr[7])
-    data_link_id = np.array(data_link_id, dtype = np.int64)
+            # 减少数据量，防止内存不足
+            if lines_num > 2000:
+                break
+    data_link_id = np.array(data_link_id, dtype=np.int64)
     # data_width = np.array(data_width, dtype = np.int)
-    data_direction = np.array(data_direction, dtype = np.int)
-    data_snodeid = np.array(data_snodeid, dtype = np.int)
-    data_enodeid = np.array(data_enodeid, dtype = np.int)
-    data_length = np.array(data_length, dtype = np.float)
+    data_direction = np.array(data_direction, dtype=np.int)
+    data_snodeid = np.array(data_snodeid, dtype=np.int)
+    data_enodeid = np.array(data_enodeid, dtype=np.int)
+    data_length = np.array(data_length, dtype=np.float)
     # data_speedclass = np.array(data_speedclass, dtype = np.int)
     # data_lanenum = np.array(data_lanenum, dtype = np.int)oh_width = one_hot_encode(data_width)
-    
+
     oh_width = one_hot_encode(data_width)
     oh_speedclass = one_hot_encode(data_speedclass)
     oh_lanenum = one_hot_encode(data_lanenum)
@@ -241,11 +255,10 @@ def load_data(filename):
 
     oh_feature = feature_merge([oh_width, oh_length, oh_speedclass, oh_lanenum])
 
-
     G = nx.Graph()
     for i in range(lines_num - 1):
         G.add_edge(data_snodeid[i], data_enodeid[i])
-    
+
     node_list = list(G.nodes)
     fea_matrix = np.zeros((len(node_list), oh_feature.shape[1]))
 
@@ -255,38 +268,41 @@ def load_data(filename):
         link_feature = oh_feature[i]
         snode_index = node_list.index(s_node_id)
         enode_index = node_list.index(e_node_id)
-        
+
         fea_matrix[snode_index, :] += link_feature
         fea_matrix[enode_index, :] += link_feature
-    
+
     adj_matrix = nx.adjacency_matrix(G)
-    
+
     return adj_matrix, fea_matrix
 
+
 ############################## train proc #################################
+
+
 def print_msg(msg):
     print(time.strftime("%Y-%m-%d %H:%M:%S", time.localtime()), msg)
     return
 
+
 def train():
-    model = 'GAE'
+    modelname = 'GAE'
     filename = ''
     if platform.system() == 'Windows':
         filename = r"C:\Users\pengl\Downloads\road_network_sub-dataset\road_network_sub-dataset"
     else:
         filename = "/home/lip/文档/data/road_network_sub-dataset/road_network_sub-dataset"
-    
+
     print_msg("begin loading data ...")
     adj, features = load_data(filename)
     print_msg("load data ok.")
 
     print_msg("begin initial data ...")
-    input_dim = adj.shape[0] 
-    hidden1_dim = 32
-    hidden2_dim = 16
-    use_feature = True
-    num_epoch = 200
-    learning_rate = 0.01
+    args.input_dim = features.shape[1]
+    args.hidden1_dim = 7
+    args.hidden2_dim = 2
+    args.learning_rate = 0.01
+    args.num_epoch = 20
 
     # Store original adjacency matrix (without diagonal entries) for later
     adj_orig = adj
@@ -301,7 +317,7 @@ def train():
 
     num_nodes = adj.shape[0]
 
-    features = features.tolil()
+    features = sp.lil_matrix(features)
     features = sparse_to_tuple(features.tocoo())
 
     num_features = features[2][1]
@@ -316,27 +332,23 @@ def train():
     adj_label = adj_train + sp.eye(adj_train.shape[0])
     adj_label = sparse_to_tuple(adj_label)
 
-    adj_norm = torch.sparse.FloatTensor(torch.LongTensor(adj_norm[0].T), 
-                                torch.FloatTensor(adj_norm[1]), 
-                                torch.Size(adj_norm[2]))
-    adj_label = torch.sparse.FloatTensor(torch.LongTensor(adj_label[0].T), 
-                                torch.FloatTensor(adj_label[1]), 
-                                torch.Size(adj_label[2]))
-    features = torch.sparse.FloatTensor(torch.LongTensor(features[0].T), 
-                                torch.FloatTensor(features[1]), 
-                                torch.Size(features[2]))
+    adj_norm = torch.sparse.FloatTensor(torch.LongTensor(adj_norm[0].T), torch.FloatTensor(adj_norm[1]),
+                                        torch.Size(adj_norm[2]))
+    adj_label = torch.sparse.FloatTensor(torch.LongTensor(adj_label[0].T), torch.FloatTensor(adj_label[1]),
+                                         torch.Size(adj_label[2]))
+    features = torch.sparse.FloatTensor(torch.LongTensor(features[0].T), torch.FloatTensor(features[1]),
+                                        torch.Size(features[2]))
 
     weight_mask = adj_label.to_dense().view(-1) == 1
-    weight_tensor = torch.ones(weight_mask.size(0)) 
+    weight_tensor = torch.ones(weight_mask.size(0))
     weight_tensor[weight_mask] = pos_weight
 
     # init model and optimizer
-    model = getattr(model,args.model)(adj_norm)
-    optimizer = Adam(model.parameters(), lr=args.learning_rate)
+    model = GAE(adj_norm)
+    optimizer = torch.optim.Adam(model.parameters(), lr=args.learning_rate)
     print_msg("create model ok.")
 
     def get_scores(edges_pos, edges_neg, adj_rec):
-
         def sigmoid(x):
             return 1 / (1 + np.exp(-x))
 
@@ -371,32 +383,33 @@ def train():
 
     print_msg("begin train data...")
     # train model
+    hidden_z = 0
     for epoch in range(args.num_epoch):
         t = time.time()
 
-        A_pred = model(features)
+        hidden_z, A_pred = model(features)
         optimizer.zero_grad()
-        loss = log_lik = norm*F.binary_cross_entropy(A_pred.view(-1), adj_label.to_dense().view(-1), weight = weight_tensor)
+        loss = log_lik = norm * F.binary_cross_entropy(
+            A_pred.view(-1), adj_label.to_dense().view(-1), weight=weight_tensor)
         if args.model == 'VGAE':
-            kl_divergence = 0.5/ A_pred.size(0) * (1 + 2*model.logstd - model.mean**2 - torch.exp(model.logstd)).sum(1).mean()
+            kl_divergence = 0.5 / A_pred.size(0) * (1 + 2 * model.logstd - model.mean**2 -
+                                                    torch.exp(model.logstd)).sum(1).mean()
             loss -= kl_divergence
 
         loss.backward()
         optimizer.step()
 
-        train_acc = get_acc(A_pred,adj_label)
+        train_acc = get_acc(A_pred, adj_label)
 
         val_roc, val_ap = get_scores(val_edges, val_edges_false, A_pred)
-        print("Epoch:", '%04d' % (epoch + 1), "train_loss=", "{:.5f}".format(loss.item()),
-            "train_acc=", "{:.5f}".format(train_acc), "val_roc=", "{:.5f}".format(val_roc),
-            "val_ap=", "{:.5f}".format(val_ap),
-            "time=", "{:.5f}".format(time.time() - t))
-
+        print("Epoch:", '%04d' % (epoch + 1), "train_loss=", "{:.5f}".format(loss.item()), "train_acc=",
+              "{:.5f}".format(train_acc), "val_roc=", "{:.5f}".format(val_roc), "val_ap=", "{:.5f}".format(val_ap),
+              "time=", "{:.5f}".format(time.time() - t))
 
     test_roc, test_ap = get_scores(test_edges, test_edges_false, A_pred)
-    print("End of training!", "test_roc=", "{:.5f}".format(test_roc),
-        "test_ap=", "{:.5f}".format(test_ap))
+    print("End of training!", "test_roc=", "{:.5f}".format(test_roc), "test_ap=", "{:.5f}".format(test_ap))
 
+    print(hidden_z.sha
 
 if __name__ == "__main__":
     train()
